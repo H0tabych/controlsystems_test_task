@@ -31,7 +31,7 @@ CREATE TABLE authorization_time (
 	FOREIGN KEY (user_id) REFERENCES `user`(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) COMMENT = "Старт сессии пользователя";
 
-CREATE OR REPLACE VIEW `session` AS
+CREATE OR REPLACE VIEW `session` AS (
 SELECT
 	a_t.user_id,
 	u.user_name,
@@ -39,5 +39,6 @@ SELECT
 	u.group_id
 FROM authorization_time as a_t
 LEFT JOIN `user` AS u ON 
-	a_t.user_id = u.id;
+	a_t.user_id = u.id
+);
 
