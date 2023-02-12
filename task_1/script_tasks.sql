@@ -5,7 +5,6 @@ USE user_session;
 */
 
 -- Решение в виде сводной таблицы
--- Сделаем общее табличное выражение на случай, если кто-то из пользователей не заходил ни разу (хотя здесь это не так)
 
 SELECT DISTINCT 
 	user_id,
@@ -38,15 +37,48 @@ FROM s
 WHERE last_for_7_days <= 3
 ;
 
+/*
+2. Вывести для каждого пользователя максимальный интервал между двумя соседними входами
+*/
+WITH it AS (
+	SELECT 
+		user_id,
+		user_name,
+		TO_SECONDS(login_datetime) - TO_SECONDS(LAG(login_datetime) OVER w) AS interval_login_sec
+	FROM `session`
+	WINDOW w AS (PARTITION BY user_id ORDER BY login_datetime)
+)
 
--- Вывести для каждого пользователя максимальный интервал между двумя соседними входами
-
--- Вывести для каждого пользователя разницу по времени между первым и последним входом
-
--- Вывести пользователей, выполнивших последний вход среди пользователей своей группы
+SELECT DISTINCT 
+	user_id,
+	user_name,
+	MAX(interval_login_sec) OVER w AS max_interval_login_sec
+FROM it
+WINDOW w AS (PARTITION BY user_id);
 
 /*
-Вывести таблицу вида:
+3. Вывести для каждого пользователя разницу по времени между первым и последним входом
+*/
+
+SELECT DISTINCT 
+	user_id,
+	user_name,
+	TO_SECONDS(MAX(login_datetime) OVER w) - TO_SECONDS(MIN(login_datetime) OVER w) AS first_last_diff_sec
+FROM `session`
+WINDOW w AS (PARTITION BY user_id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING);
+
+/*
+4. Вывести пользователей, выполнивших последний вход среди пользователей своей группы
+*/
+SELECT DISTINCT
+	group_id,
+	FIRST_VALUE(user_name) OVER w AS user_name,
+	FIRST_VALUE(login_datetime) OVER w AS last_user_login
+FROM `session`
+WINDOW w AS (PARTITION BY group_id ORDER BY login_datetime DESC);
+
+/*
+5. Вывести таблицу вида:
 19.09	20.09	21.09
 user_name1	1	0	1
 user_name2	1	1	0
@@ -54,7 +86,7 @@ user_name2	1	1	0
 */
 
 /*
-Вывести таблицу вида:
+6. Вывести таблицу вида:
 12-16.09	19-23.09
 user_name1	10	5
 user_name2	7	3
