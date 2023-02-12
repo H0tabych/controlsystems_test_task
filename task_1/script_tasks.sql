@@ -5,16 +5,25 @@ USE user_session;
 */
 
 -- Решение в виде сводной таблицы
+WITH ll AS (
+	SELECT DISTINCT 
+		user_id,
+		NTH_VALUE (login_datetime, 3) OVER W AS `last_login - 2`,
+		NTH_VALUE (login_datetime, 2) OVER W AS `last_login - 1`,
+		FIRST_VALUE(login_datetime) OVER w AS last_login
+	FROM `session`
+	WHERE login_datetime >= CURRENT_TIMESTAMP() - INTERVAL 7 DAY 
+	WINDOW w AS (PARTITION BY user_id ORDER BY login_datetime DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 3 FOLLOWING)
+)
 
-SELECT DISTINCT 
-	user_id,
-	user_name,
-	NTH_VALUE (login_datetime, 3) OVER W AS `last_login - 2`,
-	NTH_VALUE (login_datetime, 2) OVER W AS `last_login - 1`,
-	FIRST_VALUE(login_datetime) OVER w AS last_login
-FROM `session`
-WHERE login_datetime >= CURRENT_TIMESTAMP() - INTERVAL 7 DAY 
-WINDOW w AS (PARTITION BY user_id ORDER BY login_datetime DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 3 FOLLOWING)
+SELECT
+	u.id,
+	ll.last_login,
+	ll.`last_login - 1`,
+	ll.`last_login - 2`
+FROM `user` AS u
+LEFT JOIN ll ON u.id = ll.user_id
+ORDER BY u.id
 ;
 
 -- решение в виде плоской таблицы
@@ -84,6 +93,33 @@ user_name1	1	0	1
 user_name2	1	1	0
 где 1/0 - был/не был вход
 */
+WITH tfd AS (
+	SELECT DISTINCT 
+		user_id,
+		DAYOFMONTH(login_datetime) = 19 AS `19`,
+		DAYOFMONTH(login_datetime) = 20 AS `20`,
+		DAYOFMONTH(login_datetime) = 21 AS `21`
+	FROM `session`
+	WHERE MONTH(login_datetime) = 9 AND DAYOFMONTH(login_datetime) IN  (19, 20, 21)
+	ORDER by user_id 
+),
+pvt AS (
+	SELECT DISTINCT 
+		user_id,
+		FIRST_VALUE(`19`) OVER (PARTITION BY user_id ORDER BY `19`) AS `19.09`,
+		FIRST_VALUE(`20`) OVER (PARTITION BY user_id ORDER BY `20`) AS `20.09`,
+		FIRST_VALUE(`20`) OVER (PARTITION BY user_id ORDER BY `21`) AS `21.09`
+	FROM tfd
+)
+
+SELECT
+	u.user_name,
+	IFNULL(pvt.`19.09`, 0) AS `19.09`,
+	IFNULL(pvt.`20.09`, 0) AS `20.09`,
+	IFNULL(pvt.`21.09`, 0) AS `21.09`
+FROM `user` AS u
+LEFT JOIN pvt ON u.id = pvt.user_id
+; 
 
 /*
 6. Вывести таблицу вида:
@@ -94,3 +130,33 @@ user_name2	7	3
 
 (интервалы дат указаны произвольным образом, могут быть любыми. Вместо дат начала/окончания недели можно вывести порядковый номер недели или дату понедельника)
 */
+
+WITH tfw AS (
+	SELECT  
+		user_id,
+		WEEK(login_datetime) = 36 AS `36`,
+		WEEK(login_datetime) = 37 AS `37`,
+		WEEK(login_datetime) = 38 AS `38`,
+		WEEK(login_datetime) = 39 AS `39`
+	FROM `session`
+	ORDER by user_id 
+),
+pvt AS (
+	SELECT DISTINCT 
+		user_id,
+		sum(`36`) OVER (PARTITION BY user_id, `36`) AS `36`,
+		sum(`37`) OVER (PARTITION BY user_id, `37`) AS `37`,
+		sum(`38`) OVER (PARTITION BY user_id, `38`) AS `38`,
+		sum(`39`) OVER (PARTITION BY user_id, `39`) AS `39`
+	FROM tfw
+)
+
+SELECT DISTINCT 
+	u.user_name,
+	FIRST_VALUE(IFNULL(pvt.`36`, 0)) OVER (PARTITION BY user_id ORDER BY `36` DESC) AS `36 week`,
+	FIRST_VALUE(IFNULL(pvt.`37`, 0)) OVER (PARTITION BY user_id ORDER BY `37` DESC) AS `37 week`,
+	FIRST_VALUE(IFNULL(pvt.`38`, 0)) OVER (PARTITION BY user_id ORDER BY `38` DESC) AS `38 week`,
+	FIRST_VALUE(IFNULL(pvt.`39`, 0)) OVER (PARTITION BY user_id ORDER BY `39` DESC) AS `39 week`
+FROM `user` AS u
+LEFT JOIN pvt ON u.id = pvt.user_id
+; 
